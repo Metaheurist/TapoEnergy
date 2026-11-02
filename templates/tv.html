@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Tapo Energy TV</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #0f1419;
+      color: #e8eef5;
+      font-family: Arial, Helvetica, sans-serif;
+      min-height: 100%;
+    }
+    body {
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #1c3a36 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #2a2a12 0%, transparent 50%),
+        #0f1419;
+      padding: 28px 36px 48px;
+      box-sizing: border-box;
+    }
+    * { box-sizing: border-box; }
+    .top {
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .brand {
+      float: left;
+      font-size: 42px;
+      font-weight: bold;
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+    .brand span {
+      display: block;
+      font-size: 18px;
+      color: #8b9bb0;
+      font-weight: normal;
+      margin-top: 8px;
+    }
+    .actions {
+      float: right;
+      margin-top: 8px;
+    }
+    .btn {
+      display: inline-block;
+      border: 2px solid #2a3548;
+      background: #243044;
+      color: #e8eef5;
+      font-size: 22px;
+      padding: 14px 22px;
+      margin-left: 10px;
+      border-radius: 12px;
+      cursor: pointer;
+      text-decoration: none;
+      vertical-align: middle;
+    }
+    .btn:focus {
+      outline: 3px solid #2dd4a8;
+      outline-offset: 2px;
+    }
+    .btn.primary {
+      background: #2dd4a8;
+      border-color: #2dd4a8;
+      color: #06241c;
+      font-weight: bold;
+    }
+    .btn.danger { border-color: #ef6b6b; color: #ef6b6b; }
+    .btn.small { font-size: 18px; padding: 10px 14px; margin: 6px 6px 0 0; }
+    .status {
+      clear: both;
+      padding-top: 16px;
+      color: #8b9bb0;
+      font-size: 18px;
+    }
+    .kpis {
+      margin: 0 -10px 24px;
+      overflow: hidden;
+    }
+    .kpi {
+      float: left;
+      width: 25%;
+      padding: 0 10px;
+      margin-bottom: 16px;
+    }
+    .kpi-inner {
+      background: #1a2332;
+      border: 1px solid #2a3548;
+      border-radius: 14px;
+      padding: 18px 20px;
+    }
+    .kpi-label {
+      color: #8b9bb0;
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .kpi-value {
+      font-size: 36px;
+      font-weight: bold;
+      margin-top: 6px;
+    }
+    .grid {
+      margin: 0 -10px;
+      overflow: hidden;
+    }
+    .card {
+      float: left;
+      width: 25%;
+      padding: 0 10px;
+      margin-bottom: 20px;
+    }
+    .card-inner {
+      background: #1a2332;
+      border: 1px solid #2a3548;
+      border-radius: 14px;
+      padding: 18px;
+      min-height: 210px;
+    }
+    .card-inner.on {
+      border-color: #2dd4a8;
+    }
+    .kind {
+      color: #8b9bb0;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .name {
+      font-size: 28px;
+      font-weight: bold;
+      margin: 8px 0 4px;
+    }
+    .meta {
+      color: #c8d4e2;
+      font-size: 18px;
+      margin-bottom: 14px;
+    }
+    .power {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 12px;
+      border: 1px solid #2a3548;
+      color: #8b9bb0;
+    }
+    .power.live {
+      background: #2dd4a8;
+      border-color: #2dd4a8;
+      color: #06241c;
+    }
+    .swatches { margin-top: 8px; }
+    .swatch {
+      display: inline-block;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 2px solid #e8eef5;
+      margin-right: 8px;
+      margin-top: 6px;
+      vertical-align: middle;
+      cursor: pointer;
+    }
+    .swatch:focus { outline: 3px solid #fff; outline-offset: 2px; }
+    .msg {
+      color: #f0b429;
+      font-size: 18px;
+      min-height: 24px;
+      margin-bottom: 12px;
+    }
+    .empty {
+      color: #8b9bb0;
+      font-size: 24px;
+      padding: 40px 0;
+    }
+    @media (max-width: 1400px) {
+      .card { width: 33.333%; }
+      .kpi { width: 50%; }
+    }
+    @media (max-width: 900px) {
+      .card, .kpi { width: 50%; }
+      .brand { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand">TAPO ENERGY<span>TV control · local network</span></div>
+    <div class="actions">
+      <button class="btn" id="btn-full" type="button">Full dashboard</button>
+      <button class="btn primary" id="btn-scan" type="button">Refresh scan</button>
+    </div>
+    <div class="status" id="status">Loading…</div>
+  </div>
+  <div class="msg" id="msg"></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid" id="grid"><div class="empty">Loading devices…</div></div>
+
+  <script>
+    (function () {
+      var SWATCHES = [
+        { name: "Red", hue: 0, color: "#ef4444" },
+        { name: "Orange", hue: 30, color: "#f97316" },
+        { name: "Yellow", hue: 60, color: "#eab308" },
+        { name: "Green", hue: 120, color: "#22c55e" },
+        { name: "Cyan", hue: 180, color: "#06b6d4" },
+        { name: "Blue", hue: 240, color: "#3b82f6" },
+        { name: "Purple", hue: 280, color: "#a855f7" },
+        { name: "Pink", hue: 330, color: "#ec4899" }
+      ];
+
+      var pollTimer = null;
+      var busy = false;
+
+      function $(id) {
+        return document.getElementById(id);
+      }
+
+      function setMsg(text) {
+        $("msg").innerHTML = text || "";
+      }
+
+      function xhr(method, url, body, cb) {
+        var req = new XMLHttpRequest();
+        req.open(method, url, true);
+        req.setRequestHeader("Accept", "application/json");
+        if (body) {
+          req.setRequestHeader("Content-Type", "application/json");
+        }
+        req.onreadystatechange = function () {
+          if (req.readyState !== 4) return;
+          var data = null;
+          try {
+            data = JSON.parse(req.responseText || "{}");
+          } catch (e) {
+            data = { error: "Bad response" };
+          }
+          cb(req.status, data);
+        };
+        req.onerror = function () {
+          cb(0, { error: "Network error" });
+        };
+        req.send(body ? JSON.stringify(body) : null);
+      }
+
+      function fmtKwh(n) {
+        return (Number(n) || 0).toFixed(3);
+      }
+
+      function fmtW(n) {
+        return (Number(n) || 0).toFixed(1) + " W";
+      }
+
+      function esc(s) {
+        return String(s == null ? "" : s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function render(data) {
+        var totals = data.totals || {};
+        var devices = data.devices || [];
+        var scanned = data.scanned_at ? new Date(data.scanned_at * 1000) : null;
+        var when = scanned ? scanned.toLocaleTimeString() : "never";
+        var err = data.error ? (" · " + data.error) : "";
+
+        $("status").innerHTML =
+          devices.length + " devices · last scan " + when +
+          (data.scanning ? " · scanning…" : "") + err;
+
+        $("kpis").innerHTML =
+          kpi("Today", fmtKwh(totals.today_kwh) + " kWh") +
+          kpi("7 days", fmtKwh(totals.past_7d_kwh) + " kWh") +
+          kpi("30 days", fmtKwh(totals.past_30d_kwh) + " kWh") +
+          kpi("Live load", fmtW(totals.live_watts));
+
+        if (!devices.length) {
+          $("grid").innerHTML = '<div class="empty">No devices yet. Press Refresh scan.</div>';
+          return;
+        }
+
+        var html = "";
+        for (var i = 0; i < devices.length; i++) {
+          html += cardHtml(devices[i]);
+        }
+        $("grid").innerHTML = html;
+      }
+
+      function kpi(label, value) {
+        return (
+          '<div class="kpi"><div class="kpi-inner">' +
+          '<div class="kpi-label">' + esc(label) + "</div>" +
+          '<div class="kpi-value">' + esc(value) + "</div>" +
+          "</div></div>"
+        );
+      }
+
+      function cardHtml(d) {
+        var on = !!d.device_on;
+        var meta = d.model || "";
+        if (d.kind === "plug") {
+          meta += " · " + fmtW(d.live_watts);
+        } else if (d.brightness != null) {
+          meta += " · " + d.brightness + "%";
+        }
+
+        var html =
+          '<div class="card"><div class="card-inner' + (on ? " on" : "") + '">' +
+          '<div class="kind">' + esc(d.kind === "bulb" ? "Light" : "Plug") + "</div>" +
+          '<div class="name">' + esc(d.name || d.ip) + "</div>" +
+          '<div class="power' + (on ? " live" : "") + '">' + (on ? "ON" : "OFF") + "</div>" +
+          '<div class="meta">' + esc(meta) + "</div>" +
+          '<button class="btn small primary" type="button" data-act="on" data-ip="' + esc(d.ip) + '">On</button>' +
+          '<button class="btn small" type="button" data-act="off" data-ip="' + esc(d.ip) + '">Off</button>' +
+          '<button class="btn small" type="button" data-act="toggle" data-ip="' + esc(d.ip) + '">Toggle</button>';
+
+        if (d.kind === "bulb") {
+          html +=
+            '<button class="btn small" type="button" data-act="brightness" data-ip="' + esc(d.ip) + '" data-value="25">25%</button>' +
+            '<button class="btn small" type="button" data-act="brightness" data-ip="' + esc(d.ip) + '" data-value="50">50%</button>' +
+            '<button class="btn small" type="button" data-act="brightness" data-ip="' + esc(d.ip) + '" data-value="100">100%</button>';
+        }
+
+        if (d.is_color) {
+          html += '<div class="swatches">';
+          for (var i = 0; i < SWATCHES.length; i++) {
+            var s = SWATCHES[i];
+            html +=
+              '<button class="swatch" type="button" title="' + esc(s.name) +
+              '" style="background:' + s.color +
+              '" data-act="hue_sat" data-ip="' + esc(d.ip) +
+              '" data-hue="' + s.hue + '" data-sat="100"></button>';
+          }
+          html +=
+            '<button class="btn small" type="button" data-act="color_temp" data-ip="' + esc(d.ip) + '" data-value="2700">Warm</button>' +
+            '<button class="btn small" type="button" data-act="color_temp" data-ip="' + esc(d.ip) + '" data-value="4000">Neutral</button>' +
+            '<button class="btn small" type="button" data-act="color_temp" data-ip="' + esc(d.ip) + '" data-value="6500">Cool</button>';
+          html += "</div>";
+        }
+
+        html += "</div></div>";
+        return html;
+      }
+
+      function loadDevices() {
+        xhr("GET", "/api/devices", null, function (status, data) {
+          if (status >= 200 && status < 300) {
+            if (data.scanning) {
+              data.scanning = true;
+            }
+            render(data);
+          } else {
+            setMsg((data && data.error) || "Could not load devices");
+          }
+        });
+        xhr("GET", "/api/health", null, function (status, data) {
+          if (status >= 200 && status < 300 && data.scanning) {
+            $("status").innerHTML = $("status").innerHTML.replace(" · scanning…", "") + " · scanning…";
+          }
+        });
+      }
+
+      function control(action, ip, value) {
+        if (busy) {
+          setMsg("Wait for the last command…");
+          return;
+        }
+        busy = true;
+        setMsg("Sending " + action + "…");
+        xhr("POST", "/api/control", { ip: ip, action: action, value: value }, function (status, data) {
+          busy = false;
+          if (status >= 200 && status < 300 && data.ok) {
+            setMsg(data.message || "Done");
+            if (data.device) {
+              // Refresh full list so KPIs stay accurate
+              loadDevices();
+            }
+          } else {
+            setMsg((data && data.error) || "Control failed");
+          }
+        });
+      }
+
+      function startScan() {
+        setMsg("Scanning network…");
+        xhr("POST", "/api/scan", {}, function (status, data) {
+          if (status >= 200 && status < 300) {
+            setMsg(data.started === false ? "Scan already running…" : "Scanning…");
+            var tries = 0;
+            var timer = setInterval(function () {
+              tries += 1;
+              loadDevices();
+              xhr("GET", "/api/health", null, function (st, health) {
+                if (st >= 200 && st < 300 && !health.scanning) {
+                  clearInterval(timer);
+                  setMsg("Scan complete");
+                  loadDevices();
+                }
+              });
+              if (tries > 90) {
+                clearInterval(timer);
+                setMsg("Scan is taking a long time — check PC / credentials");
+              }
+            }, 2000);
+          } else {
+            setMsg((data && data.error) || "Could not start scan");
+          }
+        });
+      }
+
+      document.body.onclick = function (ev) {
+        var t = ev.target || ev.srcElement;
+        while (t && t !== document.body && !t.getAttribute("data-act")) {
+          t = t.parentNode;
+        }
+        if (!t || !t.getAttribute) return;
+        var act = t.getAttribute("data-act");
+        if (!act) return;
+        var ip = t.getAttribute("data-ip");
+        if (act === "hue_sat") {
+          control("hue_sat", ip, [
+            parseInt(t.getAttribute("data-hue"), 10),
+            parseInt(t.getAttribute("data-sat"), 10) || 100
+          ]);
+        } else if (act === "brightness" || act === "color_temp") {
+          control(act, ip, parseInt(t.getAttribute("data-value"), 10));
+        } else {
+          control(act, ip, null);
+        }
+      };
+
+      $("btn-scan").onclick = function () { startScan(); };
+      $("btn-full").onclick = function () { window.location.href = "/?full=1"; };
+
+      loadDevices();
+      pollTimer = setInterval(loadDevices, 15000);
+      // Auto-scan once if nothing loaded yet
+      xhr("GET", "/api/devices", null, function (status, data) {
+        if (status >= 200 && status < 300) {
+          var devices = data.devices || [];
+          if (!devices.length) startScan();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
