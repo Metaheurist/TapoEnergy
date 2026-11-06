@@ -93,7 +93,16 @@ Dash (React/Plotly) often fails on TV browsers and only shows the background. Us
 | Alien Abduction | Green siren pulse |
 | SOS | Morse `... --- ...` in red |
 
-White-only bulbs are skipped (they cannot set hue/saturation). Optional env knob: `EFFECT_BRIGHTNESS` (default 100; falls back to `POLICE_BRIGHTNESS` if set).
+White-only bulbs are skipped (they cannot set hue/saturation).
+
+Optional env knobs:
+
+| Var | Default | Role |
+|-----|---------|------|
+| `EFFECT_BRIGHTNESS` | `100` | Peak brightness (falls back to `POLICE_BRIGHTNESS`) |
+| `EFFECT_MIN_FRAME_S` | `0.10` | Min seconds per animation frame (adaptive; work time counts) |
+| `EFFECT_MAX_IN_FLIGHT` | `4` | Max concurrent bulb commands |
+| `EFFECT_CMD_TIMEOUT` | `0.8` | Per-command timeout so hung bulbs don’t stall the loop |
 
 ## Project layout
 
