@@ -13,7 +13,7 @@ from dash import ALL, Dash, Input, Output, State, dash_table, dcc, html, no_upda
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request
 
-from police_mode import police_mode
+from light_effects import EFFECTS, light_effects
 from tapo_scanner import DeviceReading, ScanResult, run_device_command, run_scan, update_cached_device
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -24,6 +24,8 @@ _cache: dict = {
     "result": ScanResult(error="No scan yet. Press Refresh to discover devices."),
     "scanning": False,
 }
+# Skip rebuilding Plotly figures on idle polls when nothing changed.
+_ui_fingerprint: tuple | None = None
 
 
 def _get_result() -> ScanResult:
@@ -178,6 +180,35 @@ def _device_table(table_id: str, extra_conditional: list | None = None) -> dash_
     )
 
 
+def _effect_mode_tile(effect) -> dbc.Col:
+    return dbc.Col(
+        html.Div(
+            [
+                html.Div(
+                    effect.label,
+                    className=f"effect-tile-banner effect-pill mode-{effect.id}",
+                ),
+                html.Div(effect.description, className="effect-tile-desc"),
+                html.Div(
+                    [
+                        html.Span("On", className="ctrl-label mb-0"),
+                        dbc.Switch(
+                            id={"type": "effect-tile-toggle", "mode": effect.id},
+                            value=False,
+                            className="effect-switch",
+                        ),
+                    ],
+                    className="effect-tile-toggle-row",
+                ),
+            ],
+            className="effect-tile",
+        ),
+        xs=12,
+        sm=6,
+        lg=4,
+    )
+
+
 app.layout = dbc.Container(
     [
         dcc.Store(id="device-options-store"),
@@ -185,7 +216,7 @@ app.layout = dbc.Container(
         dcc.Store(id="flipped-tiles", data=[]),
         dcc.Store(id="control-version", data=0),
         dcc.Store(id="scan-stamp", data=0),
-        dcc.Interval(id="poll-interval", interval=1500, n_intervals=0),
+        dcc.Interval(id="poll-interval", interval=3000, n_intervals=0),
         dcc.Interval(id="auto-refresh", interval=60_000, n_intervals=0, disabled=True),
         html.Div(
             [
@@ -423,23 +454,24 @@ app.layout = dbc.Container(
                                     html.Div(
                                         [
                                             html.Span(
-                                                id="police-active-pill",
-                                                className="police-pill d-none",
-                                                children="POLICE ON",
+                                                id="effect-active-pill",
+                                                className="effect-pill d-none",
+                                                children="MODE ON",
                                             ),
                                             dbc.Button(
                                                 [
-                                                    html.I(className="bi bi-lightning-charge-fill me-2"),
-                                                    "Police Lights",
+                                                    html.I(className="bi bi-stars me-2"),
+                                                    "Light Modes",
                                                 ],
-                                                id="police-open-btn",
+                                                id="effect-open-btn",
                                                 color="danger",
                                                 outline=True,
                                                 size="sm",
-                                                className="police-btn",
+                                                className="effect-btn",
                                             ),
                                         ],
-                                        className="d-flex align-items-center gap-2",
+                                        id="effect-controls-wrap",
+                                        className="d-none",
                                     ),
                                 ],
                                 className="section-head",
@@ -454,39 +486,33 @@ app.layout = dbc.Container(
                 dbc.Modal(
                     [
                         dbc.ModalHeader(
-                            dbc.ModalTitle("Police Lights"),
+                            dbc.ModalTitle("Light Modes"),
                             close_button=True,
                         ),
                         dbc.ModalBody(
                             [
                                 html.P(
-                                    "Flash every colour light from the last scan red / blue at full brightness. "
-                                    "Turning police mode off restores each light’s previous on/off state, colour, and brightness.",
+                                    "Flip a mode on to run it across every colour light from the last scan. "
+                                    "Only one mode runs at a time. Flip it off to restore prior light states.",
                                     className="mb-3",
-                                    style={"color": "var(--muted)", "marginBottom": "0.75rem"},
+                                    style={"color": "var(--muted)"},
                                 ),
-                                html.Div(id="police-modal-status", className="scan-msg mb-3"),
-                                html.Div(
-                                    [
-                                        html.Span("Police mode", className="ctrl-label mb-0"),
-                                        dbc.Switch(
-                                            id="police-toggle",
-                                            value=False,
-                                            className="police-switch",
-                                        ),
-                                    ],
-                                    className="d-flex align-items-center justify-content-between",
+                                html.Div(id="effect-modal-status", className="scan-msg mb-3"),
+                                dbc.Row(
+                                    [_effect_mode_tile(e) for e in EFFECTS],
+                                    className="g-3",
                                 ),
                             ]
                         ),
                         dbc.ModalFooter(
-                            dbc.Button("Close", id="police-close-btn", color="secondary", outline=True)
+                            dbc.Button("Close", id="effect-close-btn", color="secondary", outline=True)
                         ),
                     ],
-                    id="police-modal",
+                    id="effect-modal",
                     is_open=False,
                     centered=True,
-                    className="police-modal",
+                    size="lg",
+                    className="effect-modal",
                 ),
             ],
             id="control-view",
@@ -730,31 +756,130 @@ app.index_string = """
                 border-color: var(--grid) !important; color: var(--text) !important;
             }
             .btn-outline-secondary:hover { background: var(--panel2) !important; }
-            .police-btn {
+            .effect-btn {
                 border-color: #ef4444 !important;
                 color: #fecaca !important;
                 font-weight: 600;
             }
-            .police-btn:hover {
+            .effect-btn:hover {
                 background: color-mix(in srgb, #ef4444 22%, transparent) !important;
                 border-color: #f87171 !important;
                 color: #fff !important;
             }
-            .police-pill {
+            .effect-pill {
                 display: inline-flex; align-items: center;
-                padding: 0.15rem 0.55rem; border-radius: 999px;
+                padding: 0.2rem 0.65rem; border-radius: 999px;
                 font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em;
-                color: #fff; background: linear-gradient(90deg, #ef4444, #2563eb);
-                animation: police-pulse 0.45s steps(2, end) infinite;
+                color: #fff;
+                text-shadow: 0 1px 2px rgba(0,0,0,0.55);
+                border: 1px solid rgba(255,255,255,0.18);
             }
-            .police-pill.d-none { display: none !important; }
-            @keyframes police-pulse {
-                0% { filter: brightness(1.15); }
-                50% { filter: brightness(0.75); }
+            .effect-pill.d-none { display: none !important; }
+            .effect-pill.mode-police {
+                background: linear-gradient(90deg, #ef4444 0%, #ef4444 45%, #2563eb 55%, #2563eb 100%);
+                animation: pill-police 0.35s steps(2, end) infinite;
             }
-            .police-switch .form-check-input:checked {
+            .effect-pill.mode-disco {
+                background: linear-gradient(90deg, #ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7);
+                background-size: 200% 100%;
+                animation: pill-disco 1.1s linear infinite;
+            }
+            .effect-pill.mode-chaos {
+                background: linear-gradient(135deg, #f43f5e, #a855f7, #22d3ee, #facc15);
+                animation: pill-chaos 0.28s steps(3, end) infinite;
+            }
+            .effect-pill.mode-heartbeat {
+                background: linear-gradient(90deg, #7f1d1d, #ef4444, #7f1d1d);
+                animation: pill-heartbeat 1.1s ease-in-out infinite;
+            }
+            .effect-pill.mode-lightning {
+                background: linear-gradient(90deg, #0f172a, #1e3a8a, #e2e8f0, #1e3a8a, #0f172a);
+                background-size: 200% 100%;
+                animation: pill-lightning 2.2s ease-in-out infinite;
+            }
+            .effect-pill.mode-fireplace {
+                background: linear-gradient(90deg, #7c2d12, #ea580c, #fbbf24, #ea580c, #7c2d12);
+                background-size: 180% 100%;
+                animation: pill-fireplace 1.4s ease-in-out infinite;
+            }
+            .effect-pill.mode-alien {
+                background: linear-gradient(90deg, #14532d, #22c55e, #86efac, #22c55e, #14532d);
+                animation: pill-alien 1.2s ease-in-out infinite;
+            }
+            .effect-pill.mode-sos {
+                background: #b91c1c;
+                animation: pill-sos 1.05s steps(1, end) infinite;
+            }
+            @keyframes pill-police {
+                0% { filter: brightness(1.2) hue-rotate(0deg); }
+                50% { filter: brightness(0.85) hue-rotate(180deg); }
+            }
+            @keyframes pill-disco {
+                0% { background-position: 0% 50%; }
+                100% { background-position: 200% 50%; }
+            }
+            @keyframes pill-chaos {
+                0% { filter: hue-rotate(0deg) saturate(1.3); }
+                33% { filter: hue-rotate(90deg) saturate(1.6); }
+                66% { filter: hue-rotate(200deg) saturate(1.2); }
+            }
+            @keyframes pill-heartbeat {
+                0%, 20%, 40%, 100% { transform: scale(1); filter: brightness(0.9); }
+                10%, 30% { transform: scale(1.08); filter: brightness(1.25); }
+            }
+            @keyframes pill-lightning {
+                0%, 70%, 100% { background-position: 0% 50%; filter: brightness(0.75); }
+                72%, 78% { background-position: 100% 50%; filter: brightness(1.6); }
+                75% { background-position: 50% 50%; filter: brightness(2); }
+            }
+            @keyframes pill-fireplace {
+                0%, 100% { background-position: 0% 50%; filter: brightness(0.95); }
+                50% { background-position: 100% 50%; filter: brightness(1.2); }
+            }
+            @keyframes pill-alien {
+                0%, 100% { filter: brightness(0.85) drop-shadow(0 0 0 transparent); }
+                50% { filter: brightness(1.25) drop-shadow(0 0 8px #22c55e); }
+            }
+            @keyframes pill-sos {
+                0%, 12%, 24%, 36%, 48%, 100% { background: #7f1d1d; opacity: 0.85; }
+                6%, 18%, 30% { background: #ef4444; opacity: 1; }
+                55%, 70%, 85% { background: #ef4444; opacity: 1; }
+                62%, 77% { background: #7f1d1d; opacity: 0.85; }
+            }
+            .effect-switch .form-check-input:checked {
                 background-color: #ef4444;
                 border-color: #ef4444;
+            }
+            .effect-tile {
+                height: 100%;
+                border: 1px solid var(--grid);
+                border-radius: 14px;
+                background: linear-gradient(165deg, var(--panel2), var(--panel));
+                padding: 0.85rem;
+                display: flex;
+                flex-direction: column;
+                gap: 0.55rem;
+            }
+            .effect-tile-banner {
+                justify-content: center;
+                width: 100%;
+                text-align: center;
+                animation: none !important;
+                filter: none !important;
+                transform: none !important;
+            }
+            .effect-tile-desc {
+                color: var(--muted);
+                font-size: 0.82rem;
+                line-height: 1.35;
+                flex: 1;
+            }
+            .effect-tile-toggle-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 0.5rem;
+                margin-top: 0.15rem;
             }
             .modal-content {
                 background: var(--panel) !important;
@@ -1201,25 +1326,40 @@ def _value_for_ip(ids, values, ip):
 
 
 @app.callback(
-    Output("police-modal", "is_open"),
-    Input("police-open-btn", "n_clicks"),
-    Input("police-close-btn", "n_clicks"),
-    State("police-modal", "is_open"),
+    Output("effect-controls-wrap", "className"),
+    Input("scan-stamp", "data"),
+    Input("poll-interval", "n_intervals"),
+)
+def toggle_effect_controls_visibility(_stamp, _n):
+    result = _get_result()
+    has_colour = any(d.kind == "bulb" and d.is_color for d in result.devices)
+    status = light_effects.status()
+    # Keep visible while a mode is running / restoring so it can still be turned off.
+    if has_colour or status.get("active") or status.get("restoring"):
+        return "d-flex align-items-center gap-2"
+    return "d-none"
+
+
+@app.callback(
+    Output("effect-modal", "is_open"),
+    Input("effect-open-btn", "n_clicks"),
+    Input("effect-close-btn", "n_clicks"),
+    State("effect-modal", "is_open"),
     prevent_initial_call=True,
 )
-def toggle_police_modal(open_clicks, close_clicks, is_open):
+def toggle_effect_modal(open_clicks, close_clicks, is_open):
     from dash import ctx
 
     if not ctx.triggered_id:
         return no_update
-    if ctx.triggered_id == "police-open-btn":
+    if ctx.triggered_id == "effect-open-btn":
         return True
-    if ctx.triggered_id == "police-close-btn":
+    if ctx.triggered_id == "effect-close-btn":
         return False
     return not is_open
 
 
-def _apply_police_snapshots_to_cache(snapshots) -> None:
+def _apply_effect_snapshots_to_cache(snapshots) -> None:
     """Push restored light state back into the scan cache so tiles match reality."""
     if not snapshots:
         return
@@ -1237,70 +1377,122 @@ def _apply_police_snapshots_to_cache(snapshots) -> None:
             _cache["result"] = update_cached_device(_cache["result"], device)
 
 
+_EFFECT_PILL_MODES = {
+    "police",
+    "disco",
+    "chaos",
+    "heartbeat",
+    "lightning",
+    "fireplace",
+    "alien",
+    "sos",
+}
+
+
+def _effect_pill(status: dict) -> tuple[str, str]:
+    active = bool(status.get("active") or status.get("restoring"))
+    mode = status.get("mode") or "police"
+    if mode not in _EFFECT_PILL_MODES:
+        mode = "police"
+    label = (status.get("mode_label") or mode).upper()
+    text = f"{label} ON"
+    if active:
+        return f"effect-pill mode-{mode}", text
+    return "effect-pill d-none", text
+
+
+def _effect_toggle_values(active_mode: str | None) -> list[bool]:
+    return [e.id == active_mode for e in EFFECTS]
+
+
 @app.callback(
-    Output("police-toggle", "value"),
-    Output("police-modal-status", "children"),
-    Output("police-active-pill", "className"),
+    Output({"type": "effect-tile-toggle", "mode": ALL}, "value"),
+    Output("effect-modal-status", "children"),
+    Output("effect-active-pill", "className"),
+    Output("effect-active-pill", "children"),
     Output("control-action-msg", "children", allow_duplicate=True),
     Output("control-version", "data", allow_duplicate=True),
-    Input("police-toggle", "value"),
-    Input("police-open-btn", "n_clicks"),
+    Input({"type": "effect-tile-toggle", "mode": ALL}, "value"),
+    Input("effect-open-btn", "n_clicks"),
     Input("poll-interval", "n_intervals"),
-    State("police-modal", "is_open"),
+    State({"type": "effect-tile-toggle", "mode": ALL}, "id"),
+    State("effect-modal", "is_open"),
     State("control-version", "data"),
     prevent_initial_call=True,
 )
-def sync_police_mode(toggle_on, _open_clicks, _n, modal_open, version):
+def sync_light_effects(toggle_values, _open_clicks, _n, toggle_ids, modal_open, version):
     from dash import ctx
 
     trigger = ctx.triggered_id
-    status = police_mode.status()
-    active = bool(status.get("active") or status.get("restoring"))
+    status = light_effects.status()
+    active_mode = status.get("mode") if status.get("active") else None
+    pill_class, pill_text = _effect_pill(status)
 
-    if trigger == "police-toggle":
-        if toggle_on:
-            if status.get("active"):
-                return True, status.get("message") or "Police mode on.", "police-pill", no_update, no_update
-            outcome = police_mode.start(_get_result().devices)
-            status = police_mode.status()
+    def pack(mode, msg, action_msg=no_update, ver=no_update):
+        st = light_effects.status()
+        pc, pt = _effect_pill(st)
+        am = st.get("mode") if st.get("active") else None
+        return _effect_toggle_values(am), msg, pc, pt, action_msg, ver
+
+    if isinstance(trigger, dict) and trigger.get("type") == "effect-tile-toggle":
+        mode_id = trigger.get("mode")
+        # Which value did the user set for this mode?
+        wanted_on = False
+        for val, tid in zip(toggle_values or [], toggle_ids or []):
+            if tid and tid.get("mode") == mode_id:
+                wanted_on = bool(val)
+                break
+
+        if wanted_on:
+            outcome = light_effects.start(_get_result().devices, mode_id)
+            status = light_effects.status()
             if not outcome.get("ok"):
-                msg = outcome.get("error") or status.get("message") or "Could not start police mode."
-                return False, msg, "police-pill d-none", msg, version or 0
-            msg = status.get("message") or "Police mode on."
-            return True, msg, "police-pill", msg, version or 0
+                msg = outcome.get("error") or status.get("message") or "Could not start light mode."
+                return pack(None, msg, msg, version or 0)
+            msg = status.get("message") or f"{status.get('mode_label')} on."
+            return pack(status.get("mode"), msg, msg, no_update)
 
-        if not status.get("active") and not status.get("restoring"):
-            return False, status.get("message") or "Police mode off.", "police-pill d-none", no_update, no_update
+        # Turning this tile off
+        if active_mode == mode_id:
+            outcome = light_effects.stop()
+            _apply_effect_snapshots_to_cache(outcome.get("snapshots") or [])
+            status = light_effects.status()
+            msg = status.get("message") or "Light modes off."
+            if status.get("error"):
+                msg = status["error"]
+            return pack(None, msg, msg, (version or 0) + 1)
 
-        outcome = police_mode.stop()
-        _apply_police_snapshots_to_cache(outcome.get("snapshots") or [])
-        status = police_mode.status()
-        msg = status.get("message") or "Police mode off."
-        if status.get("error"):
-            msg = status["error"]
-        return False, msg, "police-pill d-none", msg, (version or 0) + 1
+        # Feedback from exclusive sync (another mode was turned on) — ignore.
+        return no_update, no_update, no_update, no_update, no_update, no_update
 
-    pill = "police-pill" if active else "police-pill d-none"
-    msg = status.get("error") or status.get("message") or (
-        "Police mode on." if active else "Police mode off."
-    )
-
-    if trigger == "police-open-btn":
-        colour_count = sum(1 for d in _get_result().devices if d.kind == "bulb" and d.is_color)
-        if active:
-            detail = msg
+    colour_count = sum(1 for d in _get_result().devices if d.kind == "bulb" and d.is_color)
+    if trigger == "effect-open-btn":
+        if status.get("active"):
+            detail = status.get("message") or f"{status.get('mode_label')} on."
         elif colour_count:
-            detail = f"{colour_count} colour light(s) ready. Toggle police mode to start."
+            detail = f"{colour_count} colour light(s) ready. Flip a mode on."
         else:
             detail = "No colour lights yet — run Refresh scan first."
-        return active, detail, pill, no_update, no_update
+        return pack(active_mode, detail)
 
     if trigger == "poll-interval":
-        if not (modal_open or active):
-            return no_update, no_update, no_update, no_update, no_update
-        return active, msg if modal_open else no_update, pill, no_update, no_update
+        if not (modal_open or status.get("active") or status.get("restoring")):
+            return no_update, no_update, no_update, no_update, no_update, no_update
+        msg = status.get("error") or status.get("message") or (
+            f"{status.get('mode_label')} on." if status.get("active") else "Light modes off."
+        )
+        return (
+            _effect_toggle_values(active_mode) if modal_open else no_update,
+            msg if modal_open else no_update,
+            pill_class,
+            pill_text if status.get("active") else no_update,
+            no_update,
+            no_update,
+        )
 
-    return active, msg, pill, no_update, no_update
+    return pack(active_mode, status.get("message") or "Light modes off.")
+
+
 
 
 @app.callback(
@@ -1497,6 +1689,8 @@ def trigger_scan(n_clicks, n_auto, subnet):
 def refresh_ui(_n, selected_ips, metric):
     from dash import ctx
 
+    global _ui_fingerprint
+
     result = _get_result()
     scanning = _is_scanning()
     options = _device_options(result)
@@ -1511,6 +1705,24 @@ def refresh_ui(_n, selected_ips, metric):
     # If user cleared selection intentionally via device-select, respect empty list.
     if ctx.triggered_id == "device-select":
         current = [ip for ip in (selected_ips or []) if ip in available]
+
+    fingerprint = (
+        result.scanned_at or 0,
+        scanning,
+        tuple(current),
+        metric or "today_kwh",
+        result.error,
+        len(result.devices),
+    )
+    # Idle poll with unchanged data: skip Plotly/table rebuilds (keeps Flask responsive).
+    if (
+        ctx.triggered_id == "poll-interval"
+        and fingerprint == _ui_fingerprint
+        and not scanning
+    ):
+        return (no_update,) * 18
+
+    _ui_fingerprint = fingerprint
 
     selected = _selected_devices(result, current)
     totals = _totals_for(selected)
@@ -1705,4 +1917,5 @@ if __name__ == "__main__":
     port = int(os.getenv("FLASK_PORT", "8050"))
     print(f"Tapo Energy dashboard -> http://{host}:{port}")
     print(f"TV / webOS view     -> http://{host}:{port}/tv")
-    app.run(host=host, port=port, debug=False)
+    # threaded=True so effect I/O / long scans can't freeze every request.
+    app.run(host=host, port=port, debug=False, threaded=True)

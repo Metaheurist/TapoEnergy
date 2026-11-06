@@ -11,7 +11,7 @@ Local network energy dashboard with full control of TP-Link Tapo bulbs and P110 
 - **Charts** — usage by device plus plug/light selection mix
 - **Device tables** with live watts and historical kWh
 - **Full device control** — on / off / toggle; brightness; colour presets + hue/sat; colour temperature
-- **Police Lights** — Control-view modal that fast-flashes all discovered colour lights red/blue, then restores prior on/off, colour, and brightness
+- **Light Modes** — Control-view effects (police, disco, chaos, heartbeat, lightning, fireplace, alien, SOS) across colour lights, with full state restore
 - **Export CSV** of the current scan
 - Optional **60s auto-refresh**
 
@@ -72,24 +72,37 @@ Dash (React/Plotly) often fails on TV browsers and only shows the background. Us
 1. Click **Refresh scan** to discover devices on the subnet  
 2. Select devices (or use All / Plugs / Lights) to drive KPIs and charts  
 3. Toggle **Graph → Control** for flip-tile power and light controls  
-4. On Control, open **Police Lights** to toggle the red/blue flash sequence  
+4. On Control, open **Light Modes** to run party / gag sequences  
 
-### Police Lights (Control view)
+### Light Modes (Control view)
 
 1. Run a scan so colour bulbs are cached  
-2. Switch to **Control** → **Police Lights**  
-3. Toggle **Police mode** on — every colour light from the last scan flashes red / blue at full brightness (~0.12s interval)  
-4. Toggle off — each light restores the on/off state, colour (or colour temperature), and brightness captured before police mode started  
+2. Switch to **Control** → **Light Modes**  
+3. Pick a mode, toggle **Run mode** on — every colour light from the last scan joins the sequence  
+4. Switch modes while running to change the gag without a new snapshot  
+5. Toggle off — each light restores the on/off state, colour (or colour temperature), and brightness captured before the first mode started  
 
-White-only bulbs are skipped (they cannot set hue/saturation). Optional env knobs: `POLICE_INTERVAL`, `POLICE_BRIGHTNESS`.
+| Mode | What it does |
+|------|----------------|
+| Police | Fast red / blue flash |
+| Disco Inferno | Rainbow hue chase across lights |
+| Chaos Rave | Random colour per light every blink |
+| Heartbeat | Red lub-dub brightness pulse |
+| Lightning Storm | Moody blue with random white strikes |
+| Fireplace | Warm orange flicker |
+| Alien Abduction | Green siren pulse |
+| SOS | Morse `... --- ...` in red |
+
+White-only bulbs are skipped (they cannot set hue/saturation). Optional env knob: `EFFECT_BRIGHTNESS` (default 100; falls back to `POLICE_BRIGHTNESS` if set).
 
 ## Project layout
 
 | File | Role |
 |------|------|
-| `app.py` | Flask + Dash UI (graph view + control tiles + police modal) |
+| `app.py` | Flask + Dash UI (graph view + control tiles + light-modes modal) |
 | `tapo_scanner.py` | LAN discovery, energy reads, device commands |
-| `police_mode.py` | Background police flash across colour lights, with state restore |
+| `light_effects.py` | Pluggable light-effect engine with snapshot / restore |
+| `police_mode.py` | Thin back-compat shim around `light_effects` |
 | `police_lights.py` | Optional single-bulb red/blue flash demo (CLI) |
 | `.env.example` | Env template |
 
@@ -98,4 +111,4 @@ White-only bulbs are skipped (they cannot set hue/saturation). Optional env knob
 - Runs on your local network; the machine must reach device IPs on the same LAN/VLAN as the plugs and bulbs.
 - First scan can take a minute on a `/24` subnet while devices are discovered and polled.
 - `police_lights.py` is a standalone toy script (`POLICE_LIGHT_IP`, `POLICE_BRIGHTNESS`, `POLICE_INTERVAL` optional) — stop with Ctrl+C.
-- Dashboard police mode uses the same interval/brightness env vars and runs from the Control UI rather than the CLI.
+- Dashboard light modes run from the Control UI; only one effect runs at a time.
