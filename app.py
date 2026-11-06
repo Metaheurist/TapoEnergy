@@ -13,6 +13,7 @@ from dash import ALL, Dash, Input, Output, State, dash_table, dcc, html, no_upda
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request
 
+from police_mode import police_mode
 from tapo_scanner import DeviceReading, ScanResult, run_device_command, run_scan, update_cached_device
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -409,18 +410,84 @@ app.layout = dbc.Container(
                         [
                             html.Div(
                                 [
-                                    html.Span("Device controls", className="section-title mb-0"),
-                                    html.Span("Click a tile to flip it and reveal controls", className="ctrl-label mb-0"),
+                                    html.Div(
+                                        [
+                                            html.Span("Device controls", className="section-title mb-0"),
+                                            html.Span(
+                                                "Click a tile to flip it and reveal controls",
+                                                className="ctrl-label mb-0",
+                                            ),
+                                        ],
+                                        className="d-flex flex-column gap-1",
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Span(
+                                                id="police-active-pill",
+                                                className="police-pill d-none",
+                                                children="POLICE ON",
+                                            ),
+                                            dbc.Button(
+                                                [
+                                                    html.I(className="bi bi-lightning-charge-fill me-2"),
+                                                    "Police Lights",
+                                                ],
+                                                id="police-open-btn",
+                                                color="danger",
+                                                outline=True,
+                                                size="sm",
+                                                className="police-btn",
+                                            ),
+                                        ],
+                                        className="d-flex align-items-center gap-2",
+                                    ),
                                 ],
                                 className="section-head",
-                                style={"justifyContent": "space-between", "flexWrap": "wrap"},
+                                style={"justifyContent": "space-between", "flexWrap": "wrap", "gap": "0.75rem"},
                             ),
                             html.Div(id="control-action-msg", className="scan-msg mb-3"),
                             dbc.Row(id="control-tiles", className="g-3"),
                         ]
                     ),
                     className="panel",
-                )
+                ),
+                dbc.Modal(
+                    [
+                        dbc.ModalHeader(
+                            dbc.ModalTitle("Police Lights"),
+                            close_button=True,
+                        ),
+                        dbc.ModalBody(
+                            [
+                                html.P(
+                                    "Flash every colour light from the last scan red / blue at full brightness. "
+                                    "Turning police mode off restores each light’s previous on/off state, colour, and brightness.",
+                                    className="mb-3",
+                                    style={"color": "var(--muted)", "marginBottom": "0.75rem"},
+                                ),
+                                html.Div(id="police-modal-status", className="scan-msg mb-3"),
+                                html.Div(
+                                    [
+                                        html.Span("Police mode", className="ctrl-label mb-0"),
+                                        dbc.Switch(
+                                            id="police-toggle",
+                                            value=False,
+                                            className="police-switch",
+                                        ),
+                                    ],
+                                    className="d-flex align-items-center justify-content-between",
+                                ),
+                            ]
+                        ),
+                        dbc.ModalFooter(
+                            dbc.Button("Close", id="police-close-btn", color="secondary", outline=True)
+                        ),
+                    ],
+                    id="police-modal",
+                    is_open=False,
+                    centered=True,
+                    className="police-modal",
+                ),
             ],
             id="control-view",
             style={"display": "none"},
@@ -663,6 +730,41 @@ app.index_string = """
                 border-color: var(--grid) !important; color: var(--text) !important;
             }
             .btn-outline-secondary:hover { background: var(--panel2) !important; }
+            .police-btn {
+                border-color: #ef4444 !important;
+                color: #fecaca !important;
+                font-weight: 600;
+            }
+            .police-btn:hover {
+                background: color-mix(in srgb, #ef4444 22%, transparent) !important;
+                border-color: #f87171 !important;
+                color: #fff !important;
+            }
+            .police-pill {
+                display: inline-flex; align-items: center;
+                padding: 0.15rem 0.55rem; border-radius: 999px;
+                font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em;
+                color: #fff; background: linear-gradient(90deg, #ef4444, #2563eb);
+                animation: police-pulse 0.45s steps(2, end) infinite;
+            }
+            .police-pill.d-none { display: none !important; }
+            @keyframes police-pulse {
+                0% { filter: brightness(1.15); }
+                50% { filter: brightness(0.75); }
+            }
+            .police-switch .form-check-input:checked {
+                background-color: #ef4444;
+                border-color: #ef4444;
+            }
+            .modal-content {
+                background: var(--panel) !important;
+                color: var(--text) !important;
+                border: 1px solid var(--grid) !important;
+            }
+            .modal-header, .modal-footer {
+                border-color: var(--grid) !important;
+            }
+            .modal-title { font-family: Syne, sans-serif; font-weight: 700; }
         </style>
     </head>
     <body>
@@ -1099,6 +1201,109 @@ def _value_for_ip(ids, values, ip):
 
 
 @app.callback(
+    Output("police-modal", "is_open"),
+    Input("police-open-btn", "n_clicks"),
+    Input("police-close-btn", "n_clicks"),
+    State("police-modal", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_police_modal(open_clicks, close_clicks, is_open):
+    from dash import ctx
+
+    if not ctx.triggered_id:
+        return no_update
+    if ctx.triggered_id == "police-open-btn":
+        return True
+    if ctx.triggered_id == "police-close-btn":
+        return False
+    return not is_open
+
+
+def _apply_police_snapshots_to_cache(snapshots) -> None:
+    """Push restored light state back into the scan cache so tiles match reality."""
+    if not snapshots:
+        return
+    result = _get_result()
+    for snap in snapshots:
+        device = next((d for d in result.bulbs if d.ip == snap.ip), None)
+        if not device:
+            continue
+        device.device_on = snap.device_on
+        device.brightness = snap.brightness
+        device.color_temp = snap.color_temp
+        device.hue = snap.hue
+        device.saturation = snap.saturation
+        with _cache_lock:
+            _cache["result"] = update_cached_device(_cache["result"], device)
+
+
+@app.callback(
+    Output("police-toggle", "value"),
+    Output("police-modal-status", "children"),
+    Output("police-active-pill", "className"),
+    Output("control-action-msg", "children", allow_duplicate=True),
+    Output("control-version", "data", allow_duplicate=True),
+    Input("police-toggle", "value"),
+    Input("police-open-btn", "n_clicks"),
+    Input("poll-interval", "n_intervals"),
+    State("police-modal", "is_open"),
+    State("control-version", "data"),
+    prevent_initial_call=True,
+)
+def sync_police_mode(toggle_on, _open_clicks, _n, modal_open, version):
+    from dash import ctx
+
+    trigger = ctx.triggered_id
+    status = police_mode.status()
+    active = bool(status.get("active") or status.get("restoring"))
+
+    if trigger == "police-toggle":
+        if toggle_on:
+            if status.get("active"):
+                return True, status.get("message") or "Police mode on.", "police-pill", no_update, no_update
+            outcome = police_mode.start(_get_result().devices)
+            status = police_mode.status()
+            if not outcome.get("ok"):
+                msg = outcome.get("error") or status.get("message") or "Could not start police mode."
+                return False, msg, "police-pill d-none", msg, version or 0
+            msg = status.get("message") or "Police mode on."
+            return True, msg, "police-pill", msg, version or 0
+
+        if not status.get("active") and not status.get("restoring"):
+            return False, status.get("message") or "Police mode off.", "police-pill d-none", no_update, no_update
+
+        outcome = police_mode.stop()
+        _apply_police_snapshots_to_cache(outcome.get("snapshots") or [])
+        status = police_mode.status()
+        msg = status.get("message") or "Police mode off."
+        if status.get("error"):
+            msg = status["error"]
+        return False, msg, "police-pill d-none", msg, (version or 0) + 1
+
+    pill = "police-pill" if active else "police-pill d-none"
+    msg = status.get("error") or status.get("message") or (
+        "Police mode on." if active else "Police mode off."
+    )
+
+    if trigger == "police-open-btn":
+        colour_count = sum(1 for d in _get_result().devices if d.kind == "bulb" and d.is_color)
+        if active:
+            detail = msg
+        elif colour_count:
+            detail = f"{colour_count} colour light(s) ready. Toggle police mode to start."
+        else:
+            detail = "No colour lights yet — run Refresh scan first."
+        return active, detail, pill, no_update, no_update
+
+    if trigger == "poll-interval":
+        if not (modal_open or active):
+            return no_update, no_update, no_update, no_update, no_update
+        return active, msg if modal_open else no_update, pill, no_update, no_update
+
+    return active, msg, pill, no_update, no_update
+
+
+@app.callback(
     Output("control-version", "data"),
     Output("control-action-msg", "children"),
     Input({"type": "ctrl-on", "ip": ALL}, "n_clicks"),
@@ -1498,6 +1703,6 @@ def api_control():
 if __name__ == "__main__":
     host = os.getenv("FLASK_HOST", "127.0.0.1")
     port = int(os.getenv("FLASK_PORT", "8050"))
-    print(f"Tapo Energy dashboard → http://{host}:{port}")
-    print(f"TV / webOS view     → http://{host}:{port}/tv")
+    print(f"Tapo Energy dashboard -> http://{host}:{port}")
+    print(f"TV / webOS view     -> http://{host}:{port}/tv")
     app.run(host=host, port=port, debug=False)
